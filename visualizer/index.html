@@ -87,7 +87,7 @@ will accumulate a backlog.
                     </svg>
                 </div>
             </div>
-            <div class="uiblock">
+            <!--<div class="uiblock">
                 <div class="title">Runrate ($/min)</div>
                 <div id="dollar-display" class="dol">$0</div>
             </div>
@@ -96,10 +96,15 @@ will accumulate a backlog.
                 <div class="dol">
                     <div id="exact-dollar-display"></div>
                 </div>
+            </div>-->
+            <div class="uiblock" id="pubsub-campaign">
+                <select id="pubsub-campaign-select" ng-model="selectedCampaign" ng-change="addCampaignToPubSub()">
+                    <option value="">Please Select a Campaign</option>
+                    <option ng-repeat="c in campaigns" value={{c.f[1].v}}>{{c.f[0].v}}</option>
+                </select>
             </div>
-            <div class="uiblock" id="missingdata-block">
-                <div class="title">Running taxis</div>
-                <canvas id="missingdata" width="200" height="200" style="width: 200px; height: 200px;"></canvas>
+            <div class="uiblock">
+                <button id="refresh-topic-button" ng-click="refreshTopic()" style="display: none;">Refresh</button>
             </div>
             <div id="data-status" class="uiblock">
                 <div class="flex-spacer"></div>

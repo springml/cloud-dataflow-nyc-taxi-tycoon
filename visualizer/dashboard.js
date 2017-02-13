@@ -22,6 +22,8 @@ var startFetchingRidesButton = document.getElementById('start-fetching-button');
 var stopFetchingRidesButton = document.getElementById('stop-fetching-button');
 var projectsSelect = document.getElementById('project-selection');
 var topicsSelect = document.getElementById('pubsub-topic-selection');
+var campaignSelect = document.getElementById('pubsub-campaign');
+var refreshTopicBtn = document.getElementById('refresh-topic-button');
 
 // display for data overflow
 var dataStatus = queryIfDisplayed('#data-status .msg');
@@ -120,7 +122,7 @@ function setStartStopButton(val) {
 }
 
 var app = angular.module('TaxiRidesVisualizer', []);
-app.controller('ProjectTopicsController', function($scope, $timeout, projectsService, topicsService) {
+app.controller('ProjectTopicsController', function($scope, $timeout, projectsService, topicsService, campaignService) {
     $scope.authorize = function() {
         auth2.signIn();
     };
@@ -135,10 +137,18 @@ app.controller('ProjectTopicsController', function($scope, $timeout, projectsSer
     };
 
     $scope.startFetching = function() {
-        $scope.pubsub_status = "Creating PubSub subscription...";
-        setStartStopButton("disabled")
+        if (!$scope.showStartStopBtn) {
+            if ($scope.selectedTopicOnRefresh != undefined && $scope.selectedTopicOnRefresh != "") {
+                topicId = $scope.selectedTopicOnRefresh
+            } else {
+                topicId = $scope.selectedCampaign;
+            }
+        } else {
+            $scope.pubsub_status = "Creating PubSub subscription...";
+            setStartStopButton("disabled")
+            topicId = $scope.selectedTopic.id
+        }
         projectId = $scope.selectedProject.projectId
-        topicId = $scope.selectedTopic.id
         createTopicPrFn = function(reason) {
             return pubsub.projects.subscriptions
                 .create({
@@ -157,7 +167,9 @@ app.controller('ProjectTopicsController', function($scope, $timeout, projectsSer
                     if (auth2.isSignedIn.get()) {
                         PUBSUB_SUBSCRIPTION = response.result.name;
                         startPullingFromPubSub();
-                        setStartStopButton("stop")
+                        if ($scope.showStartStopBtn) {
+                            setStartStopButton("stop")
+                        }
                         //$scope.pubsub_status = "Fetching rides...";
                         $scope.pubsub_status = "";
                         $scope.$apply();
@@ -180,6 +192,11 @@ app.controller('ProjectTopicsController', function($scope, $timeout, projectsSer
             .then(clearStatusFn, clearStatusFn);
     };
 
+    $scope.addCampaignToPubSub = function() {
+      $scope.showStartStopBtn = false
+      $scope.startFetching();
+    }
+
     $scope.loadProjects = function() {
         $scope.pubsub_status = 'Checking authentication...';
         authPromise.then(function() {
@@ -199,6 +216,8 @@ app.controller('ProjectTopicsController', function($scope, $timeout, projectsSer
     $scope.loadProjects();
     $scope.projectSelected = function() {
         $scope.loadTopics();
+        $scope.loadCampaigns();
+        refreshTopicBtn.style.display = 'block';
     };
 
     $scope.loadTopics = function () {
@@ -220,10 +239,32 @@ app.controller('ProjectTopicsController', function($scope, $timeout, projectsSer
         }
     }
 
+    $scope.loadCampaigns = function() {
+         if ($scope.selectedProject != null) {
+             
+             campaignSelect.style.display = 'block';
+             campaignService.getCampaigns($scope.selectedProject.projectId).then(
+                 function (campaigns) {
+                     $scope.campaigns = campaigns;
+                 }
+             )
+         }
+    }
+
     $scope.topicSelected = function() {
         if ($scope.selectedTopic != null)
+            $scope.showStartStopBtn = true
             setStartStopButton("start")
     };
+
+    $scope.refreshTopic = function() {
+        if($scope.selectedProject != null) {
+            $scope.showStartStopBtn = false
+            $scope.selectedTopicOnRefresh = "projects/billion-taxi-rides/topics/smltarget3"
+        
+            $scope.startFetching()
+        }
+    }
 });
 
 app.factory('projectsService', function($q) {
@@ -234,13 +275,7 @@ app.factory('projectsService', function($q) {
                 if (auth2.isSignedIn.get()) {
                     var request = crm.projects.list({ pageSize: 1000 })
                     request.execute(function(resp) {
-                        projects = []
-                        resp.projects.forEach(function(p) {
-                            if (p.lifecycleState === "ACTIVE") {
-                                projects.push(p)
-                            }
-                        });
-                        deferred.resolve(projects)
+                        deferred.resolve(resp.projects)
                     })
                 }
             })
@@ -264,6 +299,28 @@ app.factory('topicsService', function($q) {
                             });
                         }
                         deferred.resolve(topics)
+                    })
+                }
+            })
+            return deferred.promise;
+        }
+    }
+});
+
+app.factory('campaignService', function($q) {
+    return {
+        getCampaigns: function(projectId) {
+            var deferred = $q.defer();
+            authPromise.then(function() {
+                if (auth2.isSignedIn.get()) {
+                    var request = bigquery.jobs.query({
+                        'projectId':'19808069448',
+                        'query':'SELECT campaign, topic_id from [billion-taxi-rides:advertising.campaign_mapping] limit 10;'
+                    });
+                    request.execute(function(resp) {
+                        campaigns = []
+                        campaigns = resp.result.rows;
+                        deferred.resolve(campaigns)
                     })
                 }
             })

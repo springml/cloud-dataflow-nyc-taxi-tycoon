@@ -157,6 +157,6 @@ canvas#missingdata {
 #exact-dollar-display .corrected {
     color: red;
 }
-#project-selection, #pubsub-topic-selection, #start-fetching-button, #stop-fetching-button {
+#project-selection, #pubsub-topic-selection, #start-fetching-button, #stop-fetching-button, #pubsub-campaign {
     display: none;
 }
