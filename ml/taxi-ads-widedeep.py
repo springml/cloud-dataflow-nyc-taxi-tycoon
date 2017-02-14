@@ -49,20 +49,19 @@ def build_estimator(model_dir):
   #         feature_columns=deep_columns,
   #         hidden_units=[100, 50])
 
-  # m = tf.contrib.learn.DNNLinearCombinedClassifier(
-  #   model_dir=model_dir,
-  #   linear_feature_columns=wide_columns,
-  #   dnn_feature_columns=deep_columns,
-  #   n_classes=37,
-  #   dnn_hidden_units=[100, 70, 50, 25])
+  m = tf.contrib.learn.DNNLinearCombinedClassifier(
+    model_dir=model_dir,
+    linear_feature_columns=wide_columns,
+    dnn_feature_columns=deep_columns,
+    n_classes=37,
+    dnn_hidden_units=[100, 100, 100, 100])
 
-  # build 3 layer DNN multinomial with x units respectively.
-  z = tf.contrib.learn.DNNClassifier(feature_columns=deep_columns,
-                                               hidden_units=[10, 20, 10],
-                                               n_classes=37,
-                                               model_dir=model_dir)
-
-  return z
+  # # build 3 layer DNN multinomial with x units respectively.
+  # z = tf.contrib.learn.DNNClassifier(feature_columns=deep_columns,
+  #                                              hidden_units=[10, 20, 10],
+  #                                              n_classes=37,
+  #                                              model_dir=model_dir)
+  return m
  
 def generate_input_fn(filename):
   def _input_fn():
@@ -81,7 +80,6 @@ def generate_input_fn(filename):
     for feature_name in CATEGORICAL_COLUMNS:
       features[feature_name] = tf.expand_dims(features[feature_name], -1)
 
-
     return features, campaign_id
 
   return _input_fn
@@ -90,7 +88,7 @@ def train_and_eval():
   test_file = "gs://ad-taxi/Taxi_Ad_Testing.csv"
   train_file = "gs://ad-taxi/Taxi_Ad_Training.csv"
 
-  train_steps = 500
+  train_steps = 100
 
   model_dir = 'models/model_' + str(int(time.time()))
   print("model directory = %s" % model_dir)
