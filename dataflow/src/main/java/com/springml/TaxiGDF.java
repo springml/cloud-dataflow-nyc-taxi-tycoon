@@ -1,5 +1,10 @@
 package com.springml;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.*;
+import com.google.api.client.http.json.JsonHttpContent;
+import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
@@ -14,15 +19,15 @@ import com.google.cloud.dataflow.sdk.values.KV;
 import com.google.cloud.dataflow.sdk.values.PCollection;
 import com.google.cloud.dataflow.sdk.values.PCollectionView;
 import com.google.cloud.dataflow.sdk.values.TypeDescriptor;
+import com.springml.model.Campaign;
 import com.springml.model.LatLon;
 import com.springml.model.RidePoint;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.io.FileOutputStream;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -32,15 +37,21 @@ public class TaxiGDF {
     private static final Logger LOG = LoggerFactory.getLogger(TaxiGDF.class);
     private static final String FILTER_CAMPAIGN = "CAMPAIGN_ENFJ_V1";
     private static final String FILTER_CATEGORY = "travel";
+    private static final String CLOUDML_SCOPE =
+            "https://www.googleapis.com/auth/cloud-platform";
 
-    private static class TransformCampaign extends SimpleFunction<TableRow, KV<String, String>> {
+    private static class TransformCampaign extends SimpleFunction<TableRow, KV<String, Campaign>> {
 
         @Override
-        public KV<String, String> apply(TableRow tableRow) {
-            String campaign = tableRow.get("campaign").toString();
+        public KV<String, Campaign> apply(TableRow tableRow) {
+            String id = tableRow.get("id").toString();
+
+            String name = tableRow.get("name").toString();
             String category = tableRow.get("category").toString();
 
-            return KV.of(campaign, category);
+            LOG.info("Name of the Campaign : " + name);
+            LOG.info("Campaign Category : " + category);
+            return KV.of(id, new Campaign(name, category));
         }
     }
 
@@ -66,6 +77,71 @@ public class TaxiGDF {
             LatLon key = new LatLon(lat, lon);
 
             return KV.of(key, t);
+        }
+    }
+
+    private static class CloudML extends DoFn<TableRow, TableRow> {
+        private String predictRestUrl;
+
+        public CloudML(String  predictRestUrl) {
+            this.predictRestUrl = predictRestUrl;
+        }
+
+        @Override
+        public void processElement(ProcessContext c) throws Exception {
+            TableRow tableRow = c.element();
+            invokeCloudML();
+
+            c.output(tableRow);
+        }
+
+        private void invokeCloudML() {
+            try {
+                GoogleCredential credential = GoogleCredential.getApplicationDefault()
+                        .createScoped(Collections.singleton(CLOUDML_SCOPE));
+                HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+                HttpRequestFactory requestFactory = httpTransport.createRequestFactory(
+                        credential);
+                GenericUrl url = new GenericUrl(predictRestUrl);
+
+                JacksonFactory jacksonFactory = new JacksonFactory();
+                JsonHttpContent jsonHttpContent = new JsonHttpContent(jacksonFactory, getPayLoad());
+
+                jsonHttpContent.setWrapperKey("instances");
+                HttpRequest request = requestFactory.buildPostRequest(url, jsonHttpContent);
+
+                LOG.info("Executing request...");
+                HttpResponse response = request.execute();
+                String content = response.parseAsString();
+
+                LOG.info("Got the following response from CloudML \n" + content);
+            } catch (Exception e) {
+                LOG.error("Error while executing CloudML", e);
+                e.printStackTrace();
+                throw new RuntimeException("Not able to execute CloudML", e);
+            }
+        }
+
+        private List<Map<String, Object>> getPayLoad() {
+            // TODO - This has to be fetched from element instead of hardcoding
+            List<Map<String, Object>> instances = new ArrayList<>();
+            Map<String, Object> map = new HashMap<>();
+            map.put("age", 25);
+            map.put("workclass", " Private");
+            map.put("education", " 11th");
+            map.put("education_num", 7);
+            map.put("marital_status", " Never-married");
+            map.put("occupation", " Machine-op-inspct");
+            map.put("relationship", " Own-child");
+            map.put("race", " Black");
+            map.put("gender", " Male");
+            map.put("capital_gain", 0);
+            map.put("capital_loss", 0);
+            map.put("hours_per_week", 40);
+            map.put("native_country", " United-States");
+
+            instances.add(map);
+            return instances;
         }
     }
 
@@ -183,22 +259,26 @@ public class TaxiGDF {
     }
 
     private static TableSchema getMergedSchema() {
-            List<TableFieldSchema> fields = new ArrayList<>();
+        List<TableFieldSchema> fields = new ArrayList<>();
 
-            fields.add(new TableFieldSchema().setName("ride_id").setType("STRING"));
-            fields.add(new TableFieldSchema().setName("point_idx").setType("INTEGER"));
-            fields.add(new TableFieldSchema().setName("latitude").setType("FLOAT"));
-            fields.add(new TableFieldSchema().setName("longitude").setType("FLOAT"));
-            fields.add(new TableFieldSchema().setName("timestamp").setType("STRING"));
-            fields.add(new TableFieldSchema().setName("meter_reading").setType("FLOAT"));
-            fields.add(new TableFieldSchema().setName("meter_increment").setType("FLOAT"));
-            fields.add(new TableFieldSchema().setName("ride_status").setType("STRING"));
-            fields.add(new TableFieldSchema().setName("passenger_count").setType("INTEGER"));
-            fields.add(new TableFieldSchema().setName("campaign").setType("STRING"));
-            fields.add(new TableFieldSchema().setName("user_liked_ad").setType("BOOLEAN"));
-            fields.add(new TableFieldSchema().setName("campaign_category").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("ride_id").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("point_idx").setType("INTEGER"));
+        fields.add(new TableFieldSchema().setName("latitude").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("longitude").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("timestamp").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("meter_reading").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("meter_increment").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("ride_status").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("passenger_count").setType("INTEGER"));
+        fields.add(new TableFieldSchema().setName("user_liked_ad").setType("BOOLEAN"));
+        fields.add(new TableFieldSchema().setName("campaign").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("campaign_name").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("campaign_category").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("dest_latitude").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("dest_longitude").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("route_info").setType("STRING"));
 
-            return new TableSchema().setFields(fields);
+        return new TableSchema().setFields(fields);
         }
 
     public static void main(String args[]) {
@@ -206,7 +286,7 @@ public class TaxiGDF {
                 PipelineOptionsFactory.fromArgs(args).withValidation().as(CustomPipelineOptions.class);
         Pipeline p = Pipeline.create(options);
 
-        PCollectionView<Map<String, String>> campaignData = p.apply(BigQueryIO.Read.named("read campaign from BigQuery")
+        PCollectionView<Map<String, Campaign>> campaignData = p.apply(BigQueryIO.Read.named("read campaign from BigQuery")
                 .from(options.getCampaignTable()))
                 .apply("Convert Campaign to KV", MapElements.via(new TransformCampaign()))
                 .apply(View.asMap());
@@ -227,12 +307,13 @@ public class TaxiGDF {
                                 TableRow tableRow = c.element();
 //                                LOG.info("Fetching SideInput");
                                 try {
-                                    Map<String, String> campaignMap = c.sideInput(campaignData);
+                                    Map<String, Campaign> campaignMap = c.sideInput(campaignData);
                                     LOG.debug("Campaign Map : " + campaignMap);
-                                    String campaign = tableRow.get("campaign").toString();
-                                    String category = campaignMap.get(campaign);
+                                    String campaignId = tableRow.get("campaign").toString();
+                                    Campaign campaign= campaignMap.get(campaignId);
 
-                                    tableRow.set("campaign_category", category);
+                                    tableRow.set("campaign_category", campaign.category);
+                                    tableRow.set("campaign_name", campaign.name);
                                 } catch (Exception e) {
                                     LOG.error("Error while getting Category", e);
                                 }
@@ -242,6 +323,7 @@ public class TaxiGDF {
                         }));
 
 
+        String predictRestUrl = options.getPredictRestUrl();
         // Getting the latest rides alone
         datastream.apply("key rides by rideid",
                 MapElements.via((TableRow ride) -> KV.of(ride.get("ride_id").toString(), ride))
@@ -260,7 +342,7 @@ public class TaxiGDF {
                         MapElements.via((KV<String, TableRow> a) -> a.getValue())
                                 .withOutputType(TypeDescriptor.of(TableRow.class)))
 
-
+//                .apply("Call Cloud ML", ParDo.of(new CloudML(predictRestUrl)))
                 //Writing lates taxi ride details with campaign data to BigQuery
                 .apply(BigQueryIO.Write.named("Write To BigQuery")
                     .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)

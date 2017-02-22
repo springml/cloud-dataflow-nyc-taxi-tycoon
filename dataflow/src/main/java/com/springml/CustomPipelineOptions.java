@@ -1,7 +1,9 @@
 package com.springml;
 
-import com.google.api.services.bigquery.model.TableReference;
-import com.google.cloud.dataflow.sdk.options.*;
+import com.google.cloud.dataflow.sdk.options.DataflowPipelineOptions;
+import com.google.cloud.dataflow.sdk.options.Default;
+import com.google.cloud.dataflow.sdk.options.Description;
+import com.google.cloud.dataflow.sdk.options.Validation;
 
 /**
  * Options class for SML TaxiGDF
@@ -63,4 +65,11 @@ public interface CustomPipelineOptions extends DataflowPipelineOptions {
     String getRideDetailsTable();
 
     void setRideDetailsTable(String value);
+
+    @Description("CloudML Predict Url to be called during execution")
+    @Default.String("https://ml.googleapis.com/v1beta1/projects/billion-taxi-rides/models/census_model/versions/v2:predict")
+    @Validation.Required
+    String getPredictRestUrl();
+
+    void setPredictRestUrl(String value);
 }

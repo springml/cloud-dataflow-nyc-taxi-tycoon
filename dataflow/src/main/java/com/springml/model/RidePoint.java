@@ -23,6 +23,11 @@ public class RidePoint {
     public int passengerCount;
     public String campaign;
     public boolean userLikedAd;
+    public String campaignName;
+    public String campaignCategory;
+    public float destLatitude;
+    public float destLongitude;
+    public String routeInfo;
 
     public RidePoint() {}
 
@@ -42,6 +47,11 @@ public class RidePoint {
         passengerCount = p.passengerCount;
         campaign = p.campaign;
         userLikedAd = p.userLikedAd;
+        campaignName = p.campaignName;
+        campaignCategory = p.campaignCategory;
+        destLatitude = p.destLatitude;
+        destLongitude = p.destLongitude;
+        routeInfo = p.routeInfo;
     }
 
     public RidePoint(TableRow r) {
@@ -87,6 +97,31 @@ public class RidePoint {
         if (likedAd != null) {
             userLikedAd = Boolean.parseBoolean(likedAd.toString());
         }
+
+        Object campaignNameObj = r.get("campaign_name");
+        if (campaignNameObj != null) {
+            campaignName = campaignNameObj.toString();
+        }
+
+        Object campaignCat = r.get("campaign_category");
+        if (campaignCat != null) {
+            campaignCategory = campaignCat.toString();
+        }
+
+        Object destLat = r.get("dest_latitude");
+        if (destLat != null) {
+            destLatitude = Float.parseFloat(destLat.toString());
+        }
+
+        Object destLon = r.get("dest_longitude");
+        if (destLon != null) {
+            destLongitude = Float.parseFloat(destLon.toString());
+        }
+
+        Object route = r.get("route_info");
+        if (route != null) {
+            routeInfo = route.toString();
+        }
     }
 
     public TableRow toTableRow() {
@@ -104,6 +139,12 @@ public class RidePoint {
             result.set("campaign", campaign);
         }
         result.set("user_liked_ad", userLikedAd);
+        result.set("campaign_name", campaignName);
+        result.set("campaign_category", campaignCategory);
+        result.set("dest_latitude", destLatitude);
+        result.set("dest_longitude", destLongitude);
+        result.set("route_info", routeInfo);
+
         return result;
     }
 }
